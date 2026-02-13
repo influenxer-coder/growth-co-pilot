@@ -13,6 +13,7 @@ import { fetchApps } from './steps/fetchApps';
 import { fetchReviews } from './steps/fetchReviews';
 import { analyzeComplaints } from './steps/analyzeComplaints';
 import { aggregate } from './steps/aggregate';
+import { generateOpportunities } from './steps/generateOpportunities';
 
 const runDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
@@ -73,6 +74,14 @@ async function run() {
     await logStep('aggregate', 'running');
     await aggregate(runDate, appsScraped, reviewsInserted);
     await logStep('aggregate', 'success', {
+      apps_processed: appsScraped,
+      reviews_processed: reviewsInserted,
+    });
+
+    // ── STEP 5: Generate per-app opportunities ───────────────────────────────
+    await logStep('generate_opportunities', 'running');
+    await generateOpportunities(runDate);
+    await logStep('generate_opportunities', 'success', {
       apps_processed: appsScraped,
       reviews_processed: reviewsInserted,
     });

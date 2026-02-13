@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   const complaintCategory = searchParams.get('complaint_category');
   const appId = searchParams.get('app_id');
   const runDate = searchParams.get('run_date');
+  const idsParam = searchParams.get('ids'); // comma-separated complaint UUIDs
   const page = Math.max(1, Number(searchParams.get('page') ?? 1));
   const limit = Math.min(100, Number(searchParams.get('limit') ?? 50));
   const offset = (page - 1) * limit;
@@ -26,6 +27,10 @@ export async function GET(request: Request) {
   if (complaintCategory) query = query.eq('complaint_category', complaintCategory);
   if (appId) query = query.eq('app_id', appId);
   if (runDate) query = query.eq('run_date', runDate);
+  if (idsParam) {
+    const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 0) query = query.in('id', ids);
+  }
 
   const { data, error, count } = await query;
 
