@@ -1,0 +1,32 @@
+{
+  "name": "growth-co-pilot-1",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "agent": "tsx agent/index.ts",
+    "agent:dry": "DRY_RUN=true tsx agent/index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "app-store-scraper": "^0.18.0",
+    "date-fns": "^4.1.0",
+    "groq-sdk": "^0.37.0",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-is": "^19.2.4",
+    "recharts": "^3.7.0",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
