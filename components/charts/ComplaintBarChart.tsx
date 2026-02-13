@@ -15,9 +15,11 @@ import { CATEGORY_COLORS } from '@/lib/supabase-client';
 interface Props {
   data: Record<string, number>;
   title?: string;
+  selectedBar?: string | null;
+  onBarClick?: (name: string) => void;
 }
 
-export function ComplaintBarChart({ data, title }: Props) {
+export function ComplaintBarChart({ data, title, selectedBar, onBarClick }: Props) {
   const chartData = Object.entries(data)
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
@@ -26,7 +28,14 @@ export function ComplaintBarChart({ data, title }: Props) {
     <div className="w-full">
       {title && <h3 className="text-sm font-medium text-gray-500 mb-3">{title}</h3>}
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={chartData} margin={{ top: 4, right: 16, bottom: 60, left: 0 }}>
+        <BarChart
+          data={chartData}
+          margin={{ top: 4, right: 16, bottom: 60, left: 0 }}
+          onClick={(e) => {
+            if (onBarClick && e?.activeLabel) onBarClick(e.activeLabel as string);
+          }}
+          style={onBarClick ? { cursor: 'pointer' } : undefined}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
           <XAxis
             dataKey="name"
@@ -46,6 +55,7 @@ export function ComplaintBarChart({ data, title }: Props) {
               <Cell
                 key={entry.name}
                 fill={CATEGORY_COLORS[entry.name] ?? '#6b7280'}
+                opacity={!selectedBar || selectedBar === entry.name ? 1 : 0.35}
               />
             ))}
           </Bar>
