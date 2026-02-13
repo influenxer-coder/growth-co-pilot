@@ -17,7 +17,7 @@ export async function fetchApps(): Promise<AppRecord[]> {
     app_id: String(app.id),
     name: app.title,
     developer: app.developer,
-    app_category: app.primaryGenre,
+    app_category: app.primaryGenre ?? (app as any).genre ?? 'Uncategorized',
     icon_url: app.icon,
     current_rank: index + 1,
     avg_rating: app.score ?? null,

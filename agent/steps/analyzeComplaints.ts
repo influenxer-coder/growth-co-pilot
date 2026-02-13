@@ -2,7 +2,8 @@ import { supabase, type ComplaintRecord } from '../lib/supabase';
 import { extractComplaints } from '../lib/groq';
 
 const BATCH_SIZE = 20;       // reviews per LLM call
-const LLM_CONCURRENCY = 5;   // parallel Groq requests
+const LLM_CONCURRENCY = 1;   // sequential — Groq free tier is 12k TPM
+const BATCH_DELAY_MS = 6000; // ~6s gap keeps us well under 12k TPM
 
 interface ReviewRow {
   id: string;
@@ -63,54 +64,67 @@ export async function analyzeComplaints(runDate: string): Promise<number> {
     batches.push(toProcess.slice(i, i + BATCH_SIZE));
   }
 
-  // Process batches with limited concurrency
-  for (let i = 0; i < batches.length; i += LLM_CONCURRENCY) {
-    const concurrentBatches = batches.slice(i, i + LLM_CONCURRENCY);
+  // Process batches sequentially with retry on 429
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
 
-    const results = await Promise.all(
-      concurrentBatches.map(async (batch) => {
-        const reviewInputs = batch.map((r, idx) => ({
-          index: idx,
-          rating: r.rating,
-          title: r.title ?? '',
-          body: r.body,
-        }));
+    const reviewInputs = batch.map((r, idx) => ({
+      index: idx,
+      rating: r.rating,
+      title: r.title ?? '',
+      body: r.body,
+    }));
 
-        const extracted = await extractComplaints(reviewInputs);
+    // Retry loop for rate-limit errors
+    let extracted;
+    let attempt = 0;
+    while (true) {
+      try {
+        extracted = await extractComplaints(reviewInputs);
+        break;
+      } catch (err: any) {
+        const msg: string = err?.message ?? String(err);
+        const is429 = msg.includes('429') || msg.includes('rate_limit_exceeded');
+        if (!is429 || attempt >= 5) throw err;
+        // Parse "Please try again in Xs" from error message, default 15s
+        const match = msg.match(/try again in (\d+(?:\.\d+)?)s/);
+        const waitMs = match ? Math.ceil(parseFloat(match[1]) * 1000) + 500 : 15000;
+        attempt++;
+        console.log(`  ⏳ Rate limited — waiting ${Math.round(waitMs / 1000)}s (attempt ${attempt})...`);
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
 
-        const complaints: ComplaintRecord[] = extracted
-          .map((c) => {
-            const review = batch[c.review_index];
-            if (!review) return null;
-            return {
-              review_id: review.id,
-              app_id: review.app_id,
-              app_category: review.app_category,
-              complaint_category: c.complaint_category,
-              complaint_text: c.complaint_text,
-              severity: Math.min(5, Math.max(1, c.severity)),
-              run_date: runDate,
-            } as ComplaintRecord;
-          })
-          .filter((c): c is ComplaintRecord => c !== null);
-
-        if (complaints.length > 0) {
-          const { error } = await supabase.from('complaints').insert(complaints);
-          if (error) console.warn(`  ⚠ Insert complaints error: ${error.message}`);
-        }
-
-        return complaints.length;
+    const complaints: ComplaintRecord[] = (extracted ?? [])
+      .map((c) => {
+        const review = batch[c.review_index];
+        if (!review) return null;
+        return {
+          review_id: review.id,
+          app_id: review.app_id,
+          app_category: review.app_category,
+          complaint_category: c.complaint_category,
+          complaint_text: c.complaint_text,
+          severity: Math.min(5, Math.max(1, c.severity)),
+          run_date: runDate,
+        } as ComplaintRecord;
       })
-    );
+      .filter((c): c is ComplaintRecord => c !== null);
 
-    totalComplaints += results.reduce((sum, n) => sum + n, 0);
+    if (complaints.length > 0) {
+      const { error } = await supabase.from('complaints').insert(complaints);
+      if (error) console.warn(`  ⚠ Insert complaints error: ${error.message}`);
+    }
 
-    const batchsDone = Math.min(i + LLM_CONCURRENCY, batches.length);
-    console.log(`  ${batchsDone}/${batches.length} batches done, ${totalComplaints} complaints found`);
+    totalComplaints += complaints.length;
 
-    // Respect Groq rate limits — small pause between concurrent groups
-    if (i + LLM_CONCURRENCY < batches.length) {
-      await new Promise((r) => setTimeout(r, 1000));
+    if ((i + 1) % 10 === 0 || i + 1 === batches.length) {
+      console.log(`  ${i + 1}/${batches.length} batches done, ${totalComplaints} complaints found`);
+    }
+
+    // Pace requests to stay under Groq free tier 12k TPM
+    if (i + 1 < batches.length) {
+      await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
     }
   }
 

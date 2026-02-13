@@ -4,7 +4,7 @@
  * Goal: Every day, fetch the top 100 free iOS apps, collect low-rating reviews,
  * use AI to extract and categorize complaints, and persist a daily summary.
  *
- * Run manually:  npx tsx agent/index.ts
+ * Run manually:  npm run agent
  * Scheduled via: .github/workflows/daily-agent.yml (cron: 0 2 * * *)
  */
 

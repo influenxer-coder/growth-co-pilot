@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { config } from 'dotenv';
+
+// Load .env.local for local development (no-op when env is already set, e.g. GitHub Actions)
+config({ path: '.env.local' });
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

@@ -7,14 +7,17 @@
     "build": "next build",
     "start": "next start",
     "agent": "tsx agent/index.ts",
-    "agent:dry": "DRY_RUN=true tsx agent/index.ts"
+    "agent:dry": "tsx agent/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
     "@supabase/supabase-js": "^2.95.3",
     "app-store-scraper": "^0.18.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
     "groq-sdk": "^0.37.0",
     "next": "16.1.6",
+    "openai": "^6.21.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-is": "^19.2.4",

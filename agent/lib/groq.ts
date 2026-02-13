@@ -1,7 +1,7 @@
-import Groq from 'groq-sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import type { ComplaintCategory } from './supabase';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export interface ExtractedComplaint {
   review_index: number;
@@ -53,18 +53,17 @@ export async function extractComplaints(
 
   const userPrompt = `Extract complaints from these ${reviews.length} app reviews:\n\n${reviewsText}\n\nReturn JSON array: [{review_index, complaint_text, complaint_category, severity}]`;
 
-  const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-    temperature: 0.1,
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 4096,
-    response_format: { type: 'json_object' },
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const content = response.choices[0]?.message?.content ?? '{"complaints":[]}';
+  const raw =
+    response.content[0]?.type === 'text' ? response.content[0].text : '[]';
+  // Strip markdown code fences if Claude wraps response in ```json ... ```
+  const content = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
   try {
     const parsed = JSON.parse(content);
@@ -80,7 +79,7 @@ export async function extractComplaints(
         typeof c.severity === 'number'
     );
   } catch {
-    console.error('Failed to parse Groq response:', content);
+    console.error('Failed to parse Claude response:', content);
     return [];
   }
 }
