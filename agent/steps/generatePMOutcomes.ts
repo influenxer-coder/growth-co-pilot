@@ -1,7 +1,6 @@
 /**
- * For each company with PM jobs, use Claude to synthesize 3-5 key outcomes
- * an entry-level PM / APM must drive, based on their job descriptions.
- * Results stored in pm_outcomes.
+ * Generate 7-10 global, cross-company MECE outcomes from ALL PM jobs.
+ * One set per run, stored in pm_global_outcomes.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -9,47 +8,47 @@ import { supabase } from '../lib/supabase';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-const SYSTEM_PROMPT = `You are a senior product leader analyzing entry-level PM job descriptions to identify the core outcomes this role must drive.
+const SYSTEM_PROMPT = `You are a senior product strategy analyst studying entry-level PM job postings.
 
-Given one or more PM job descriptions from the SAME company, extract 3-5 mutually exclusive, collectively exhaustive (MECE) outcomes that an Associate PM / APM at this company must deliver.
+Given a list of PM job titles and description snippets from multiple companies, identify 7-10 MECE (mutually exclusive, collectively exhaustive) strategic outcomes that entry-level PMs are hired to drive across the industry.
+
+These should be high-level, cross-company themes — the core "jobs to be done" for an AI PM agent replacing these humans.
 
 Rules:
-- 3 to 5 outcomes total (fewer if descriptions clearly cluster)
-- Each outcome is a business or product result, not a task or responsibility
-- Outcomes should be specific to this company's domain, not generic PM boilerplate
-- Title: concise result-oriented phrase (e.g. "Drive 20% faster checkout conversion", "Own the developer API adoption funnel")
-- Description: 1-2 sentences on why this matters and what success looks like
-- job_indices: 0-based indices of which job descriptions this outcome appears in
+- Between 7 and 10 outcomes total (aim for ~8)
+- Each outcome is a meaningful product/business result, not a task list
+- MECE: no significant overlap
+- Title: short, action-oriented (e.g. "Own End-to-End Feature Delivery" not "Product Development")
+- Description: 1-2 sentences on what success looks like across companies
+- job_indices: 0-based array of ALL job indices that strongly match this outcome
+- Every job must appear in at least one outcome
 
 Return ONLY valid JSON array. No markdown.
-Example: [{"title":"...","description":"...","job_indices":[0,1]}]`;
+[{"title":"...","description":"...","job_indices":[0,5,12]}]`;
 
-interface Job {
+interface JobSummary {
   id: string;
   title: string;
-  description: string;
+  company: string;
+  snippet: string;
 }
 
-interface Outcome {
+interface GlobalOutcome {
   title: string;
   description: string;
   job_indices: number[];
 }
 
-async function clusterJobOutcomes(companyName: string, jobs: Job[]): Promise<Outcome[]> {
-  // Truncate each description to keep prompt manageable
-  const jobText = jobs
-    .map(
-      (j, i) =>
-        `[${i}] Title: ${j.title}\n${j.description.slice(0, 1200)}`
-    )
-    .join('\n\n---\n\n');
+async function clusterAllJobs(jobs: JobSummary[]): Promise<GlobalOutcome[]> {
+  const jobsText = jobs
+    .map((j, i) => `[${i}] ${j.company}: ${j.title} — ${j.snippet}`)
+    .join('\n');
 
-  const userPrompt = `Company: ${companyName}\n\nJob descriptions (${jobs.length}):\n\n${jobText}\n\nGenerate 3-5 MECE PM outcomes for this company. Return JSON array.`;
+  const userPrompt = `${jobs.length} entry-level PM jobs across multiple companies:\n\n${jobsText}\n\nGenerate 7-10 MECE cross-company outcomes. Return JSON array.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1500,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userPrompt }],
   });
@@ -62,80 +61,69 @@ async function clusterJobOutcomes(companyName: string, jobs: Job[]): Promise<Out
 
   try {
     const parsed = JSON.parse(content);
-    const items: Outcome[] = Array.isArray(parsed)
-      ? parsed
-      : parsed.outcomes ?? [];
+    const items: GlobalOutcome[] = Array.isArray(parsed) ? parsed : parsed.outcomes ?? [];
     return items.filter(
       (o) => typeof o.title === 'string' && Array.isArray(o.job_indices)
     );
   } catch {
-    console.error(`  Failed to parse outcomes for ${companyName}:`, content.slice(0, 200));
+    console.error('  Failed to parse global outcomes:', content.slice(0, 300));
     return [];
   }
 }
 
 export async function generatePMOutcomes(scrapeDate: string): Promise<number> {
-  console.log('\n── Generate PM Outcomes ────────────────────────────────────');
+  console.log('\n── Generate Global PM Outcomes ─────────────────────────────');
 
-  // Fetch all companies that were scraped today
-  const { data: companies, error: cErr } = await supabase
-    .from('pm_companies')
-    .select('id, name')
-    .eq('last_scraped', scrapeDate);
+  // Fetch all jobs scraped today with title + short description
+  const { data: jobs, error } = await supabase
+    .from('pm_jobs')
+    .select('id, title, company_name, description')
+    .not('description', 'is', null);
 
-  if (cErr) throw new Error(`Failed to fetch companies: ${cErr.message}`);
-  console.log(`  Processing ${companies?.length ?? 0} companies`);
-
-  if (!companies?.length) return 0;
-
-  // Clear existing outcomes for this date (idempotent re-runs)
-  await supabase.from('pm_outcomes').delete().eq('scraped_date', scrapeDate);
-
-  let totalOutcomes = 0;
-
-  for (const company of companies) {
-    // Fetch jobs for this company
-    const { data: jobs, error: jErr } = await supabase
-      .from('pm_jobs')
-      .select('id, title, description')
-      .eq('company_id', company.id)
-      .not('description', 'is', null)
-      .limit(10); // cap for prompt size
-
-    if (jErr || !jobs?.length) continue;
-
-    console.log(`  ${company.name}: ${jobs.length} jobs → generating outcomes...`);
-
-    try {
-      const outcomes = await clusterJobOutcomes(company.name, jobs);
-      if (!outcomes.length) continue;
-
-      const rows = outcomes.slice(0, 5).map((o) => ({
-        company_id: company.id,
-        company_name: company.name,
-        scraped_date: scrapeDate,
-        title: o.title,
-        description: o.description ?? null,
-        job_count: o.job_indices.length,
-        job_ids: o.job_indices
-          .filter((i) => i >= 0 && i < jobs.length)
-          .map((i) => jobs[i].id),
-      }));
-
-      const { error: insErr } = await supabase.from('pm_outcomes').insert(rows);
-      if (insErr) {
-        console.error(`  Insert failed for ${company.name}:`, insErr.message);
-      } else {
-        console.log(`  ✓ ${company.name}: ${rows.length} outcomes`);
-        totalOutcomes += rows.length;
-      }
-    } catch (err) {
-      console.error(`  Error for ${company.name}:`, (err as Error).message);
-    }
-
-    await new Promise((r) => setTimeout(r, 800));
+  if (error) throw new Error(`Failed to fetch jobs: ${error.message}`);
+  if (!jobs?.length) {
+    console.log('  No jobs found — skipping outcome generation');
+    return 0;
   }
 
-  console.log(`\n  Total outcomes: ${totalOutcomes}`);
-  return totalOutcomes;
+  console.log(`  Building global outcomes from ${jobs.length} jobs...`);
+
+  // Build compact summaries (title + first 180 chars of description)
+  const summaries: JobSummary[] = jobs.map((j) => ({
+    id: j.id,
+    title: j.title,
+    company: j.company_name,
+    snippet: (j.description ?? '').slice(0, 180).replace(/\n/g, ' '),
+  }));
+
+  const outcomes = await clusterAllJobs(summaries);
+
+  if (!outcomes.length) {
+    console.log('  Claude returned no outcomes');
+    return 0;
+  }
+
+  // Cap at 10
+  const capped = outcomes.slice(0, 10);
+
+  // Delete existing outcomes for this date (idempotent)
+  await supabase.from('pm_global_outcomes').delete().eq('scraped_date', scrapeDate);
+
+  // Map indices → real job IDs
+  const rows = capped.map((o) => ({
+    scraped_date: scrapeDate,
+    title: o.title,
+    description: o.description ?? null,
+    job_count: o.job_indices.filter((i) => i >= 0 && i < jobs.length).length,
+    job_ids: o.job_indices
+      .filter((i) => i >= 0 && i < jobs.length)
+      .map((i) => jobs[i].id),
+  }));
+
+  const { error: insertErr } = await supabase.from('pm_global_outcomes').insert(rows);
+  if (insertErr) throw new Error(`Insert failed: ${insertErr.message}`);
+
+  rows.forEach((r) => console.log(`  ✓ ${r.title} (${r.job_count} jobs)`));
+  console.log(`\n  Total: ${rows.length} global outcomes`);
+  return rows.length;
 }

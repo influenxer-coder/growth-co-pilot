@@ -44,6 +44,17 @@ function isSoftwareCompany(title: string, companyName: string, description: stri
   return TECH_SIGNALS.some((sig) => haystack.includes(sig));
 }
 
+function hasPMTitle(title: string): boolean {
+  const t = title.toLowerCase();
+  return (
+    t.includes('product manager') ||
+    t.includes('product management') ||
+    t.startsWith('apm') ||
+    t.includes(' apm') ||
+    t.includes('associate pm')
+  );
+}
+
 interface MuseJob {
   id: number;
   name: string;
@@ -104,13 +115,14 @@ export async function fetchPMJobs(): Promise<number> {
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
   const filtered = allJobs.filter((j) => {
+    if (!hasPMTitle(j.name)) return false;
     const postedDate = new Date(j.publication_date);
     if (postedDate < twelveMonthsAgo) return false;
     const desc = stripHtml(j.contents ?? '');
     return isSoftwareCompany(j.name, j.company.name, desc);
   });
 
-  console.log(`  After filter (software + 12mo): ${filtered.length}`);
+  console.log(`  After filter (PM title + software + 12mo): ${filtered.length}`);
 
   if (filtered.length === 0) return 0;
 
