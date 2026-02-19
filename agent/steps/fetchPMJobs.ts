@@ -82,7 +82,7 @@ export async function fetchPMJobs(): Promise<number> {
         const fresh = data.results.filter((j) => !seenIds.has(j.id));
         fresh.forEach((j) => seenIds.add(j.id));
         allJobs.push(...fresh);
-        console.log(`    page ${page}: +${fresh.results?.length ?? fresh.length} (total ${allJobs.length})`);
+        console.log(`    page ${page}: +${fresh.length} (total ${allJobs.length})`);
 
         if (page >= data.page_count - 1) break;
         page++;
