@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { href: '/trends',     label: 'Trends' },
   { href: '/categories', label: 'By Category' },
   { href: '/apps',       label: 'Apps' },
+  { href: '/pm-jobs',    label: 'PM Jobs' },
   { href: '/runs',       label: 'Agent Runs' },
 ];
 
