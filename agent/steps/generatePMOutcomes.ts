@@ -8,20 +8,27 @@ import { supabase } from '../lib/supabase';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-const SYSTEM_PROMPT = `You are a senior product strategy analyst studying entry-level PM job postings.
+const SYSTEM_PROMPT = `You are an experienced product manager studying entry-level PM job postings.
 
-Given a list of PM job titles and description snippets from multiple companies, identify 7-10 MECE (mutually exclusive, collectively exhaustive) strategic outcomes that entry-level PMs are hired to drive across the industry.
+Given a list of PM job titles and description snippets from multiple companies, identify 7-10 core job requirements — the recurring daily and weekly activities that a PM in these roles actually spends their time on.
 
-These should be high-level, cross-company themes — the core "jobs to be done" for an AI PM agent replacing these humans.
+Think of this as: "If I joined one of these companies tomorrow, what would fill my calendar and take up most of my working hours?"
+
+Examples of the right framing:
+- "Analyze data to inform product decisions" (not "Drive data strategy")
+- "Write product specs and PRDs" (not "Define product vision")
+- "Run A/B tests and interpret experiment results"
+- "Conduct user interviews and synthesize research"
+- "Coordinate cross-functional delivery with engineering and design"
 
 Rules:
-- Between 7 and 10 outcomes total (aim for ~8)
-- Each outcome is a meaningful product/business result, not a task list
-- MECE: no significant overlap
-- Title: short, action-oriented (e.g. "Own End-to-End Feature Delivery" not "Product Development")
-- Description: 1-2 sentences on what success looks like across companies
-- job_indices: 0-based array of ALL job indices that strongly match this outcome
-- Every job must appear in at least one outcome
+- Between 7 and 10 requirements total (aim for ~8)
+- Each should be a concrete, recurring activity — something you actually DO, not a business result
+- MECE: no significant overlap between activities
+- Title: verb-led, practical (e.g. "Define and track product metrics" not "Data-driven decision making")
+- Description: 1-2 sentences on what this looks like day-to-day and how frequently it comes up across companies
+- job_indices: 0-based array of ALL job indices where this activity is prominently required
+- Every job must appear in at least one requirement
 
 Return ONLY valid JSON array. No markdown.
 [{"title":"...","description":"...","job_indices":[0,5,12]}]`;
