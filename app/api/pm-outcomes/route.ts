@@ -10,25 +10,39 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const companyId = searchParams.get('company_id');
 
-  if (!companyId) {
-    return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
+  if (companyId) {
+    // Per-company outcomes — return latest scrape, max 5
+    const { data, error } = await supabase
+      .from('pm_outcomes')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('scraped_date', { ascending: false })
+      .order('job_count', { ascending: false })
+      .limit(20);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data?.length) return NextResponse.json([]);
+
+    const latestDate = data[0].scraped_date;
+    return NextResponse.json(data.filter((o) => o.scraped_date === latestDate).slice(0, 5));
   }
 
-  // Return the most recent scrape's outcomes for this company
+  // All outcomes across companies — return latest scrape date's outcomes, ordered by job_count desc
+  const { data: latestRow, error: dateErr } = await supabase
+    .from('pm_outcomes')
+    .select('scraped_date')
+    .order('scraped_date', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (dateErr || !latestRow) return NextResponse.json([]);
+
   const { data, error } = await supabase
     .from('pm_outcomes')
     .select('*')
-    .eq('company_id', companyId)
-    .order('scraped_date', { ascending: false })
-    .order('job_count', { ascending: false })
-    .limit(20); // fetch up to 20, then filter to latest date below
+    .eq('scraped_date', latestRow.scraped_date)
+    .order('job_count', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  if (!data?.length) return NextResponse.json([]);
-
-  // Return only the latest scrape date's outcomes (max 5)
-  const latestDate = data[0].scraped_date;
-  const latest = data.filter((o) => o.scraped_date === latestDate).slice(0, 5);
-  return NextResponse.json(latest);
+  return NextResponse.json(data ?? []);
 }

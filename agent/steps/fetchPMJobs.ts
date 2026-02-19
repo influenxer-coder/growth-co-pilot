@@ -7,17 +7,20 @@
 import { supabase } from '../lib/supabase';
 
 const MUSE_BASE = 'https://www.themuse.com/api/public/jobs';
-const MAX_PAGES = 8; // 20 jobs/page → up to 160 per level
-const DELAY_MS  = 400; // be polite to The Muse
+const MAX_PAGES = 25; // 20 jobs/page → up to 500 per level
+const DELAY_MS  = 300;
 
-// Levels that map to APM / entry-level
-const TARGET_LEVELS = ['Entry Level', 'Associate'];
+// Levels that map to APM / entry-level (Mid Level = L4 equivalent at big tech)
+const TARGET_LEVELS = ['Entry Level', 'Associate', 'Mid Level'];
 
 // Keywords that indicate a software/tech product role
 const TECH_SIGNALS = [
-  'software', 'saas', 'platform', 'cloud', 'api', 'app ', 'apps ',
-  'mobile', 'digital', 'tech', 'data', 'ai', ' ml ', 'automation',
-  'ecommerce', 'fintech', 'healthtech', 'edtech', 'startup', 'product',
+  'software', 'saas', 'platform', 'cloud', 'api', 'app', 'mobile',
+  'digital', 'tech', 'data', 'ai', 'ml', 'automation', 'ecommerce',
+  'fintech', 'healthtech', 'edtech', 'startup', 'product', 'analytics',
+  'internet', 'online', 'web', 'marketplace', 'payments', 'cybersecurity',
+  'network', 'systems', 'infrastructure', 'developer', 'engineering',
+  'compute', 'enterprise', 'b2b', 'b2c', 'subscription', 'streaming',
 ];
 
 // Strip HTML tags and normalize whitespace
@@ -96,18 +99,18 @@ export async function fetchPMJobs(): Promise<number> {
 
   console.log(`  Total raw jobs: ${allJobs.length}`);
 
-  // Filter for software companies & last 6 months
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  // Filter: software company signal + last 12 months
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
   const filtered = allJobs.filter((j) => {
     const postedDate = new Date(j.publication_date);
-    if (postedDate < sixMonthsAgo) return false;
+    if (postedDate < twelveMonthsAgo) return false;
     const desc = stripHtml(j.contents ?? '');
     return isSoftwareCompany(j.name, j.company.name, desc);
   });
 
-  console.log(`  After filter (software + 6mo): ${filtered.length}`);
+  console.log(`  After filter (software + 12mo): ${filtered.length}`);
 
   if (filtered.length === 0) return 0;
 
